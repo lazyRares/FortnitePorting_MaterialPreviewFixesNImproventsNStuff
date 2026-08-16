@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -43,7 +44,82 @@ public abstract class NodeGraphPreviewWindowBase<TWindow, TModel, TTree> : Previ
         if (e.Key == Key.Home)
         {
             CenterViewport();
+            return;
         }
+
+        if (e.Key == Key.F)
+        {
+            FrameSelection();
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.H:
+                HideSelected();
+                break;
+            case Key.U:
+                UnhideSelectedOrAll();
+                break;
+        }
+    }
+
+    // H / toolbar: hide every selected node (fades it + its wires to ~10% without removing it).
+    protected void HideSelected()
+    {
+        var tree = WindowModel.SelectedTree;
+        if (tree is null) return;
+        foreach (var node in tree.NodeCache.Items.Where(node => node.IsSelected)) node.IsHidden = true;
+    }
+
+    // U / toolbar: unhide the selection, or -- if nothing is selected -- unhide everything,
+    // so a heavily-dimmed graph can always be recovered.
+    protected void UnhideSelectedOrAll()
+    {
+        var tree = WindowModel.SelectedTree;
+        if (tree is null) return;
+
+        var selected = tree.NodeCache.Items.Where(node => node.IsSelected).ToArray();
+        var targets = selected.Length > 0 ? selected : tree.NodeCache.Items.ToArray();
+        foreach (var node in targets) node.IsHidden = false;
+    }
+
+    // F key: zoom/pan so the selected node(s) fill the view (whole graph if nothing selected).
+    protected void FrameSelection()
+    {
+        if (GraphEditor is null) return;
+        var tree = WindowModel.SelectedTree;
+        if (tree is null) return;
+
+        var nodes = tree.NodeCache.Items.Where(node => node.IsSelected).ToArray();
+        if (nodes.Length == 0) nodes = tree.NodeCache.Items.ToArray();
+        if (nodes.Length == 0) return;
+
+        var minX = nodes.Min(node => node.Location.X);
+        var minY = nodes.Min(node => node.Location.Y);
+        var maxX = nodes.Max(node => node.Location.X);
+        var maxY = nodes.Max(node => node.Location.Y);
+        var center = new Point((minX + maxX) / 2, (minY + maxY) / 2);
+
+        // rough node footprint + breathing room so framed nodes aren't flush to the edges
+        const double margin = 280;
+        var width = maxX - minX + margin;
+        var height = maxY - minY + margin;
+
+        // ViewportSize is in graph units at the current zoom, so screen = size * zoom is constant.
+        var screenWidth = GraphEditor.ViewportSize.Width * GraphEditor.ViewportZoom;
+        var screenHeight = GraphEditor.ViewportSize.Height * GraphEditor.ViewportZoom;
+        if (screenWidth <= 0 || screenHeight <= 0)
+        {
+            CenterViewport();
+            return;
+        }
+
+        var zoom = Math.Clamp(Math.Min(screenWidth / width, screenHeight / height), 0.15, GraphEditor.MaxViewportZoom);
+        GraphEditor.ViewportZoom = zoom;
+        GraphEditor.ViewportLocation = new Point(
+            center.X - screenWidth / zoom / 2,
+            center.Y - screenHeight / zoom / 2);
     }
 
     protected void CenterViewport()

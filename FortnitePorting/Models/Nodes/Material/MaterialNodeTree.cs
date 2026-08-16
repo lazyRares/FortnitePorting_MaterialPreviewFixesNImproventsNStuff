@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Avalonia.Media;
 using AvaloniaEdit.Utils;
 using CUE4Parse_Conversion.Textures;
@@ -58,6 +60,29 @@ public class MaterialNodeTree : NodeTree
         ["Composite"] = Color.Parse("#272827")
     };
 
+    // Operand pins that Unreal leaves UNCONNECTED still carry an effective constant
+    // value. UE only serializes ConstA/ConstB/etc when they differ from the class
+    // default, so an empty pin looks like missing data unless we fill the default in.
+    // Ported from the Python viewer's _UNCONNECTED_PIN_CONSTS -- note that Divide (1/2)
+    // and Subtract (1/1) do NOT follow the Add/Multiply 0/1 pattern.
+    private static readonly Dictionary<string, (string Pin, string ConstKey, float Default)[]> UnconnectedPinConsts = new()
+    {
+        ["MaterialExpressionAdd"] = [("A", "ConstA", 0f), ("B", "ConstB", 1f)],
+        ["MaterialExpressionSubtract"] = [("A", "ConstA", 1f), ("B", "ConstB", 1f)],
+        ["MaterialExpressionMultiply"] = [("A", "ConstA", 0f), ("B", "ConstB", 1f)],
+        ["MaterialExpressionDivide"] = [("A", "ConstA", 1f), ("B", "ConstB", 2f)],
+        ["MaterialExpressionMax"] = [("A", "ConstA", 0f), ("B", "ConstB", 1f)],
+        ["MaterialExpressionMin"] = [("A", "ConstA", 0f), ("B", "ConstB", 1f)],
+        ["MaterialExpressionPower"] = [("Exponent", "ConstExponent", 2f)],
+        ["MaterialExpressionLinearInterpolate"] = [("A", "ConstA", 0f), ("B", "ConstB", 1f), ("Alpha", "ConstAlpha", 0.5f)],
+        ["MaterialExpressionSmoothStep"] = [("Min", "ConstMin", 0f), ("Max", "ConstMax", 1f), ("Value", "ConstValue", 0f)],
+        ["MaterialExpressionClamp"] = [("Min", "MinDefault", 0f), ("Max", "MaxDefault", 1f)],
+    };
+
+    // Socket tint for an operand pin whose value is Unreal's implicit default rather
+    // than an artist-set constant -- lets the reader tell engine fallback from intent.
+    private static readonly Color DefaultPinColor = Color.Parse("#6f757c");
+
     public override void Load(UObject obj)
     {
         base.Load(obj);
@@ -94,9 +119,10 @@ public class MaterialNodeTree : NodeTree
 
         var parentNode = new MaterialNode(material.Name, isEngineNode: false)
         {
-            HeaderColor = Color.Parse("#786859")
+            Category = "MaterialOutput",
+            IsRoot = true
         };
-        
+
         NodeCache.AddOrUpdate(parentNode);
 
         if (editorData.Properties.FirstOrDefault(prop => prop.Name.Text.Equals("MaterialAttributes")) is
@@ -304,8 +330,95 @@ public class MaterialNodeTree : NodeTree
             AddInput(ref node, expressionInput, nameOverride: name.Equals("Input") ? string.Empty : name);
         }
 
+        AddUnconnectedPinDefaults(ref node, expression);
+        AttachValueRows(ref node);
+
         return node;
     }
+
+    // Surfaces the node's artist-set scalar/bool/enum properties as always-visible rows on
+    // the node face (e.g. TextureCoordinate's UTiling/VTiling), so you don't have to click
+    // into the inspector to see them. UE omits defaults, so only edited values appear.
+    private void AttachValueRows(ref MaterialNode node)
+    {
+        const int maxRows = 6;
+
+        var rows = new StackPanel { Spacing = 1, Margin = SpaceExtension.Space(1, 0.5) };
+        var shown = 0;
+        var skipped = 0;
+
+        foreach (var property in node.Properties)
+        {
+            // ConstA/ConstB/etc are already surfaced as unconnected-pin sockets (see P1).
+            if (property.Key.StartsWith("Const", StringComparison.Ordinal)) continue;
+            if (!IsSimpleDisplayValue(property.Value)) continue;
+
+            if (shown >= maxRows)
+            {
+                skipped++;
+                continue;
+            }
+
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            row.Children.Add(new TextBlock
+            {
+                Text = property.Key,
+                FontSize = 10,
+                Foreground = new SolidColorBrush(DefaultPinColor),
+                Margin = new Thickness(0, 0, 8, 0)
+            });
+            var value = new TextBlock
+            {
+                Text = FormatDisplayValue(property.Value),
+                FontSize = 10,
+                Foreground = new SolidColorBrush(Colors.LightGray),
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            Grid.SetColumn(value, 1);
+            row.Children.Add(value);
+            rows.Children.Add(row);
+            shown++;
+        }
+
+        if (shown == 0) return;
+
+        if (skipped > 0)
+        {
+            rows.Children.Add(new TextBlock
+            {
+                Text = $"+{skipped} more (see inspector)",
+                FontSize = 9,
+                FontStyle = FontStyle.Italic,
+                Foreground = new SolidColorBrush(DefaultPinColor)
+            });
+        }
+
+        // Keep any existing inline widget (number box, texture, colour) and add the rows below it.
+        if (node.Content is Control existing)
+        {
+            var combined = new StackPanel { Spacing = 4 };
+            combined.Children.Add(existing);
+            combined.Children.Add(rows);
+            node.Content = combined;
+        }
+        else
+        {
+            node.Content = rows;
+        }
+    }
+
+    private static bool IsSimpleDisplayValue(object? value) =>
+        value is bool or int or float or double or FName || value is Enum;
+
+    private static string FormatDisplayValue(object? value) => value switch
+    {
+        bool b => b ? "true" : "false",
+        float f => FormatConstValue(f),
+        double d => FormatConstValue((float) d),
+        int i => i.ToString(CultureInfo.InvariantCulture),
+        FName name => name.Text,
+        _ => value?.ToString() ?? string.Empty
+    };
 
     private void AddInput(ref MaterialNode node, FExpressionInput expressionInput, string? nameOverride = null)
     {
@@ -400,14 +513,15 @@ public class MaterialNodeTree : NodeTree
             {
                 var name = expression.GetOrDefault<FName?>("InputName")?.Text ?? "Input";
                 node.Label = name;
-                node.HeaderColor = new Color(255, 255 / 2, 0, 0);
+                node.Category = "FunctionInput";
                 break;
             }
             case "MaterialExpressionFunctionOutput":
             {
                 var name = expression.GetOrDefault<FName?>("OutputName")?.Text ?? "Output";
                 node.Label = name;
-                node.HeaderColor = new Color(255, 255 / 2, 0, 0);
+                node.Category = "FunctionOutput";
+                node.IsRoot = true; // a material function's final output(s)
                 break;
             }
 
@@ -712,16 +826,14 @@ public class MaterialNodeTree : NodeTree
             }
         }
 
-        if (node.HeaderColor is null)
+        if (node.HeaderColor is null && node.Category is null)
         {
-            if (HeaderColorMappings.FirstOrDefault(kvp => expression.ExportType.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase)) is { Key: not null } colorMapping)
-            {
-                node.HeaderColor = colorMapping.Value;
-            }
-            else
-            {
-                node.HeaderColor = Color.Parse("#60815c");
-            }
+            // Tag the category rather than baking the colour, so the options flyout can
+            // override category colours live (the actual colour is resolved in HeaderBrush).
+            node.Category =
+                HeaderColorMappings.FirstOrDefault(kvp => expression.ExportType.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase)) is { Key: { } key }
+                    ? key
+                    : "Default";
         }
 
         if (expression.GetOrDefault<string?>("Desc") is { } description)
@@ -733,6 +845,36 @@ public class MaterialNodeTree : NodeTree
         {
             node.AddOutput(string.Empty);
         }
+    }
+
+    // For math nodes with unconnected operand pins, surface the pin's effective value
+    // (the serialized ConstX if the artist set one, otherwise Unreal's implicit default)
+    // as a labelled input socket so an empty pin reads as a known number, not missing data.
+    private void AddUnconnectedPinDefaults(ref MaterialNode node, UMaterialExpression expression)
+    {
+        if (!UnconnectedPinConsts.TryGetValue(expression.ExportType, out var table)) return;
+
+        foreach (var (pin, constKey, defaultValue) in table)
+        {
+            // pin is wired -- the real connection already shows it; leave it alone
+            if (node.GetInput(pin) is not null) continue;
+
+            var isExplicit = expression.Properties.Any(prop => prop.Name.Text.Equals(constKey, StringComparison.OrdinalIgnoreCase));
+            var value = expression.GetOrDefault(constKey, defaultValue);
+
+            node.AddInput(new NodeSocket($"{pin}  ({FormatConstValue(value)})")
+            {
+                SocketColor = isExplicit ? Colors.LightGray : DefaultPinColor
+            });
+        }
+    }
+
+    private static string FormatConstValue(float value)
+    {
+        if (float.IsNaN(value) || float.IsInfinity(value)) return value.ToString(CultureInfo.InvariantCulture);
+        if (value == MathF.Truncate(value) && MathF.Abs(value) < 1e7f)
+            return ((long) value).ToString(CultureInfo.InvariantCulture);
+        return value.ToString("g", CultureInfo.InvariantCulture);
     }
 
     private void AddColorInputs(ref MaterialNode node, bool includeRGBA = false)

@@ -38,6 +38,18 @@ public abstract partial class NodeGraphPreviewWindowModelBase<TTree>(SettingsSer
     };
 
     [RelayCommand]
+    public void CleanUpGraph()
+    {
+        if (SelectedTree is null) return;
+
+        var removed = SelectedTree.CleanUp();
+        Info.Message("Material Preview",
+            removed > 0
+                ? $"Removed {removed} node{(removed == 1 ? "" : "s")} that didn't contribute to the output."
+                : "Nothing to clean up -- every node contributes to the output.");
+    }
+
+    [RelayCommand]
     public async Task Preview(FPackageIndex index)
     {
         var asset = await index.LoadOrDefaultAsync<UObject>();

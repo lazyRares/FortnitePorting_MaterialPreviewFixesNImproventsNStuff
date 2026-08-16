@@ -15,7 +15,7 @@
         x:DataType="windowModels:MaterialPreviewWindowModel"
         Width="1280" Height="720" RequestedThemeVariant="Dark" Background="{DynamicResource WindowBackgroundBrush}"  
         TransparencyLevelHint="{Binding Settings.Application.TransparencyHints}"
-        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaChromeHints="NoChrome" FontFamily="{StaticResource SFTextRegular}"
+        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaChromeHints="NoChrome" FontFamily="{StaticResource Viga}"
         WindowStartupLocation="CenterScreen" ClosingBehavior="OwnerAndChildWindows" ExtendClientAreaTitleBarHeightHint="35"
         Icon="/Assets/LogoRebrand.ico"
         Title="Material Viewer">
@@ -40,49 +40,134 @@
                       Transform="{Binding ViewportTransform, ElementName=Editor}"
                       Drawing="{StaticResource LargeGridGeometry}" />
     </Window.Resources>
+    <Window.Styles>
+        <Style Selector="Button.ToolbarIcon">
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.ToolbarIcon avalonia|MaterialIcon">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+        </Style>
+    </Window.Styles>
     <Grid RowDefinitions="35, *" Margin="{Binding $parent[Window].OffScreenMargin}">
         <controls:WindowTitleBar Grid.Row="0" Title="Material Viewer"/>
         
         <Grid Grid.Row="1" RowDefinitions="Auto, *">
-            <ui:TabView Grid.Row="0" IsAddTabButtonVisible="False" SelectionChanged="OnTabSelectionChanged" TabCloseRequested="OnTabClosed"
-                        TabItems="{Binding Trees}" TabWidthMode="Compact"
-                        Margin="{ext:Space 0, 0, 0, 1}"
-                        SelectedItem="{Binding SelectedTree, Mode=TwoWay}">
-                <ui:TabView.TabItemTemplate>
-                    <DataTemplate x:DataType="material:MaterialNodeTree">
-                        <TextBlock Text="{Binding TreeName}"/>
-                    </DataTemplate>
-                </ui:TabView.TabItemTemplate>
-                <ui:TabView.Styles>
-                    <Style Selector="Border#RightBottomBorderLine">
-                        <Setter Property="IsVisible" Value="False"/>
-                    </Style>
-                    <Style Selector="Border#LeftRightBottomBorderLine">
-                        <Setter Property="IsVisible" Value="False"/>
-                    </Style>
-                </ui:TabView.Styles>
-            </ui:TabView>
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="{ext:Space 0, 0, 0, 1}">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="1" VerticalAlignment="Center" Margin="{ext:Space 0.5, 0}">
+                    <Button Classes="ToolbarIcon" Tapped="OnSort" ToolTip.Tip="Sort layout: nudge overlapping nodes apart (selection or whole graph)">
+                        <avalonia:MaterialIcon Kind="AutoFix"/>
+                    </Button>
+                    <Button Classes="ToolbarIcon" Command="{Binding CleanUpGraphCommand}" ToolTip.Tip="Clean up: remove nodes that don't reach the output">
+                        <avalonia:MaterialIcon Kind="Broom"/>
+                    </Button>
+                    <Border Width="1" Background="{DynamicResource ContentBorderBorderBrush}" Margin="4 5"/>
+                    <Button Classes="ToolbarIcon" Click="OnCenterView" ToolTip.Tip="Center view (Home)">
+                        <avalonia:MaterialIcon Kind="ImageFilterCenterFocus"/>
+                    </Button>
+                    <Button Classes="ToolbarIcon" Click="OnFrameSelection" ToolTip.Tip="Frame the selection (F)">
+                        <avalonia:MaterialIcon Kind="CropFree"/>
+                    </Button>
+                    <Border Width="1" Background="{DynamicResource ContentBorderBorderBrush}" Margin="4 5"/>
+                    <Button Classes="ToolbarIcon" Click="OnHideSelected" ToolTip.Tip="Hide selected nodes (H)">
+                        <avalonia:MaterialIcon Kind="EyeOffOutline"/>
+                    </Button>
+                    <Button Classes="ToolbarIcon" Click="OnUnhide" ToolTip.Tip="Unhide (U) — selection, or all if nothing selected">
+                        <avalonia:MaterialIcon Kind="EyeOutline"/>
+                    </Button>
+                </StackPanel>
+
+                <ui:TabView Grid.Column="1" IsAddTabButtonVisible="False" SelectionChanged="OnTabSelectionChanged" TabCloseRequested="OnTabClosed"
+                            TabItems="{Binding Trees}" TabWidthMode="Compact"
+                            SelectedItem="{Binding SelectedTree, Mode=TwoWay}">
+                    <ui:TabView.TabItemTemplate>
+                        <DataTemplate x:DataType="material:MaterialNodeTree">
+                            <TextBlock Text="{Binding TreeName}"/>
+                        </DataTemplate>
+                    </ui:TabView.TabItemTemplate>
+                    <ui:TabView.Styles>
+                        <Style Selector="Border#RightBottomBorderLine">
+                            <Setter Property="IsVisible" Value="False"/>
+                        </Style>
+                        <Style Selector="Border#LeftRightBottomBorderLine">
+                            <Setter Property="IsVisible" Value="False"/>
+                        </Style>
+                    </ui:TabView.Styles>
+                </ui:TabView>
+
+                <Button Grid.Column="2" Classes="ToolbarIcon" VerticalAlignment="Center" Margin="{ext:Space 0, 0, 0.5, 0}" ToolTip.Tip="Options">
+                    <avalonia:MaterialIcon Kind="Cog"/>
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <StackPanel Spacing="5" MinWidth="270" Margin="4">
+                                <TextBlock Text="Options" Classes="BodyStrongTextBlockStyle"/>
+
+                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Text="Dim unrelated on select" VerticalAlignment="Center"/>
+                                    <ToggleSwitch Grid.Column="1" MinWidth="0" VerticalAlignment="Center"
+                                                  IsChecked="{Binding DimOnSelect, Mode=TwoWay, Source={x:Static nodes:MaterialViewerSettings.Instance}}"/>
+                                    <Button Grid.Column="2" Classes="ToolbarIcon" ToolTip.Tip="Reset to default"
+                                            Command="{Binding ResetDimOnSelectCommand, Source={x:Static nodes:MaterialViewerSettings.Instance}}">
+                                        <avalonia:MaterialIcon Kind="Restore"/>
+                                    </Button>
+                                </Grid>
+
+                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Text="Straight connections" VerticalAlignment="Center"/>
+                                    <ToggleSwitch Grid.Column="1" MinWidth="0" VerticalAlignment="Center"
+                                                  IsChecked="{Binding StraightConnections, Mode=TwoWay, Source={x:Static nodes:MaterialViewerSettings.Instance}}"/>
+                                    <Button Grid.Column="2" Classes="ToolbarIcon" ToolTip.Tip="Reset to default"
+                                            Command="{Binding ResetStraightConnectionsCommand, Source={x:Static nodes:MaterialViewerSettings.Instance}}">
+                                        <avalonia:MaterialIcon Kind="Restore"/>
+                                    </Button>
+                                </Grid>
+
+                                <TextBlock Text="Node colours" Classes="BodyStrongTextBlockStyle" Margin="0 3 0 0"/>
+                                <ItemsControl ItemsSource="{Binding HeaderColors, Source={x:Static nodes:MaterialViewerSettings.Instance}}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="nodes:HeaderColorOption">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0 1">
+                                                <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                                                           Text="{Binding Category, Converter={StaticResource UnrealCaseString}}"/>
+                                                <ColorPicker Grid.Column="1" VerticalAlignment="Center" Color="{Binding Color, Mode=TwoWay}"/>
+                                                <Button Grid.Column="2" Classes="ToolbarIcon" ToolTip.Tip="Reset to default"
+                                                        Command="{Binding ResetCommand}">
+                                                    <avalonia:MaterialIcon Kind="Restore"/>
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
             
             
             <Border Grid.Row="1" Background="{DynamicResource ContentBorderBackgroundBrush}" CornerRadius="0"
                     BorderThickness="0 2 0 0" BorderBrush="{DynamicResource ContentBorderBorderBrush}">
-                <Grid Margin="{ext:Space 1}">
+                <Grid x:Name="MainSplitGrid" Margin="{ext:Space 1}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="4*"/>
-                        <ColumnDefinition Width="{ext:Space 1}"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     
                     
-                    <Grid Grid.Column="2">
+                    <Grid Grid.Column="2" x:Name="SearchPanel">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="{ext:Space 1}"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
-                            
+
                         <TextBox Grid.Row="0" Text="{Binding SelectedTree.SearchFilter}" Watermark="Search..."/>
-                            
+
                         <ListBox Grid.Row="2" ItemsSource="{Binding SelectedTree.Nodes}"
                                  SelectedItem="{Binding SelectedTree.SelectedNode, Mode=TwoWay}"
                                  SelectionMode="Single" SelectionChanged="OnSearchSelectionChanged">
@@ -97,21 +182,27 @@
                         </ListBox>
                     </Grid>
                     
-                    <GridSplitter Grid.Column="1" Background="Transparent"/>
+                    <Grid Grid.Column="1">
+                        <GridSplitter Background="Transparent" HorizontalAlignment="Stretch"/>
+                        <Button x:Name="TogglePanelButton" Click="OnTogglePanel" Content="&gt;"
+                                VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Width="18" Height="44" Padding="0" FontSize="12"
+                                ToolTip.Tip="Hide / show the search panel"/>
+                    </Grid>
                     
                     
                     <controls:ContentCard Grid.Column="0" ClipToBounds="True">
                         <Grid>
                             <Grid Background="#9F262626" ZIndex="-2"/>
                             
-                            <nodify:NodifyEditor x:Name="Editor" CornerRadius="8"
+                            <nodify:NodifyEditor x:Name="Editor" CornerRadius="4"
                                                  DataContext="{Binding SelectedTree}"
-                                                 ItemsSource="{Binding NodeCache.Items}"
+                                                 ItemsSource="{Binding GraphNodes}"
                                                  Connections="{Binding Connections}"
                                                  SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
-                                                 CanSelectMultipleItems="False" Background="Transparent"
+                                                 CanSelectMultipleItems="True" Background="Transparent"
                                                  ViewportZoom="1" MaxViewportZoom="3"
-                                                 KeyDown="OnEditorKeyDown">
+                                                 KeyDown="OnEditorKeyDown" PointerPressed="OnEditorPointerPressed">
                                 <nodify:NodifyEditor.ItemTemplate>
                                     <DataTemplate>
                                        <ContentControl Content="{Binding}">
@@ -122,10 +213,12 @@
                                                                         Width="{Binding Size.Width}"
                                                                         Height="{Binding Size.Height}"
                                                                         HeaderBrush="{Binding HeaderBrush}"
-                                                                        Background="{Binding BackgroundBrush}">
+                                                                        Background="{Binding BackgroundBrush}"
+                                                                        BorderBrush="{Binding CommentBorderBrush}"
+                                                                        BorderThickness="1.5">
                                                        <nodify:GroupingNode.HeaderTemplate>
                                                            <DataTemplate x:DataType="x:String">
-                                                               <TextBlock Text="{Binding}" Classes="BodyStrongTextBlockStyle">
+                                                               <TextBlock Text="{Binding}" Classes="BodyStrongTextBlockStyle" FontFamily="{StaticResource Viga}">
                                                                    <TextBlock.Effect>
                                                                        <DropShadowEffect Color="Black" Opacity="0.5" OffsetX="1" OffsetY="1" BlurRadius="0"/>
                                                                    </TextBlock.Effect>
@@ -145,15 +238,18 @@
                                                                 Background="{Binding BackgroundBrush}"
                                                                 BorderThickness="2" Footer="{Binding FooterContent}"
                                                                 ContentBrush="Transparent" PointerPressed="OnNodePressed">
+                                                       <nodify:Node.Effect>
+                                                           <DropShadowEffect Color="Black" Opacity="0.45" BlurRadius="14" OffsetX="0" OffsetY="4"/>
+                                                       </nodify:Node.Effect>
                                                        <nodify:Node.Styles>
                                                            <Style Selector="Border#PART_Header">
-                                                               <Setter Property="CornerRadius" Value="3 3 0 0"/>
+                                                               <Setter Property="CornerRadius" Value="2 2 0 0"/>
                                                                <Setter Property="Padding" Value="{ext:Space 1, 0.5, 1, 0.5}"/>
                                                            </Style>
                                                        </nodify:Node.Styles>
                                                        <nodify:Node.HeaderTemplate>
                                                            <DataTemplate x:DataType="x:String">
-                                                               <TextBlock Text="{Binding}" Classes="BodyStrongTextBlockStyle">
+                                                               <TextBlock Text="{Binding}" Classes="BodyStrongTextBlockStyle" FontFamily="{StaticResource Viga}">
                                                                    <TextBlock.Effect>
                                                                        <DropShadowEffect Color="Black" Opacity="0.5" OffsetX="1" OffsetY="1" BlurRadius="0"/>
                                                                    </TextBlock.Effect>
@@ -203,11 +299,12 @@
                                 </nodify:NodifyEditor.ItemTemplate>
                                 <nodify:NodifyEditor.ConnectionTemplate>
                                     <DataTemplate DataType="{x:Type nodes:NodeConnection}">
-                                        <nodify:Connection Source="{Binding From.Anchor}"
+                                        <nodify:LineConnection Source="{Binding From.Anchor}"
                                                                Target="{Binding To.Anchor}"
-                                                               ArrowEnds="None" 
+                                                               ArrowEnds="None"
+                                                               Spacing="{Binding ConnectionSpacing, Source={x:Static nodes:MaterialViewerSettings.Instance}}"
                                                                SourceOffsetMode="None" TargetOffsetMode="None"
-                                                               Fill="LightGray" Stroke="LightGray" Opacity="0.5"/>
+                                                               Fill="{Binding StrokeBrush}" Stroke="{Binding StrokeBrush}" Opacity="{Binding ConnectionOpacity}"/>
                                     </DataTemplate>
                                 </nodify:NodifyEditor.ConnectionTemplate>
                                 <nodify:NodifyEditor.ItemContainerTheme>
@@ -218,14 +315,24 @@
                                                 Value="True" />
                                         <Setter Property="IsSelected"
                                                 Value="{Binding IsSelected, Mode=TwoWay}" />
+                                        <Setter Property="Opacity"
+                                                Value="{Binding NodeOpacity}" />
+                                        <Setter Property="IsHitTestVisible"
+                                                Value="{Binding Interactable}" />
+                                        <Setter Property="ZIndex"
+                                                Value="{Binding CanvasZIndex}" />
                                     </ControlTheme>
                                 </nodify:NodifyEditor.ItemContainerTheme>
                             </nodify:NodifyEditor>
                             
-                            <Grid ZIndex="-3" 
+                            <Grid ZIndex="-3"
                                   Background="{StaticResource SmallGridLinesDrawingBrush}"/>
                             <Grid ZIndex="-2"
                                   Background="{StaticResource LargeGridLinesDrawingBrush}"/>
+
+                            <!-- Constant-size place-marker overlay (Shift+RMB to drop, click a pin to remove).
+                                 Null background so empty areas pass clicks through to the editor. -->
+                            <Canvas x:Name="PinOverlay" Background="{x:Null}" ClipToBounds="True"/>
                         </Grid>
                     </controls:ContentCard>
                     
