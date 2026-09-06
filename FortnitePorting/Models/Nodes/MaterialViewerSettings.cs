@@ -30,6 +30,9 @@ public partial class HeaderColorOption : ObservableObject
     [RelayCommand] private void Reset() => Color = Default;
 }
 
+// A selectable viewer font: a display name plus the actual family (from an embedded asset).
+public sealed record FontOption(string Name, FontFamily Font);
+
 // Viewer-wide preferences edited from the toolbar's options (gear) flyout. In-memory for
 // now (resets on restart). Each setting has its own reset command so the options UI can
 // offer per-setting resets (no global reset).
@@ -43,6 +46,16 @@ public partial class MaterialViewerSettings : ObservableObject
     // Straight wires vs. Nodify's angle-break bend near the ends.
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ConnectionSpacing))] private bool _straightConnections = true;
     public double ConnectionSpacing => StraightConnections ? 0 : 30;
+
+    // Selectable viewer font (drives the window default + node/frame titles).
+    public IReadOnlyList<FontOption> Fonts { get; } =
+    [
+        new("Viga", new FontFamily("avares://FortnitePorting/Assets/Fonts/Viga/Viga-Regular.otf#Viga")),
+        new("Chakra Petch", new FontFamily("avares://FortnitePorting/Assets/Fonts/Chakra/ChakraPetch-Bold.otf#Chakra Petch"))
+    ];
+
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ViewerFont))] private FontOption? _selectedFont;
+    public FontFamily ViewerFont => (SelectedFont ?? Fonts[0]).Font;
 
     // Per-category node header colours (defaults mirror MaterialNodeTree's mappings).
     public ObservableCollection<HeaderColorOption> HeaderColors { get; } =
@@ -75,6 +88,8 @@ public partial class MaterialViewerSettings : ObservableObject
     private MaterialViewerSettings()
     {
         _headerColorsByCategory = HeaderColors.ToDictionary(option => option.Category);
+        SelectedFont = Fonts[0]; // Viga by default
+
         foreach (var option in HeaderColors)
             option.PropertyChanged += (_, args) =>
             {
@@ -85,7 +100,7 @@ public partial class MaterialViewerSettings : ObservableObject
 
         PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName is nameof(DimOnSelect) or nameof(StraightConnections)) Save();
+            if (args.PropertyName is nameof(DimOnSelect) or nameof(StraightConnections) or nameof(SelectedFont)) Save();
         };
 
         Load();
@@ -101,6 +116,8 @@ public partial class MaterialViewerSettings : ObservableObject
             var json = JObject.Parse(File.ReadAllText(SettingsPath));
             if (json.Value<bool?>("DimOnSelect") is { } dim) DimOnSelect = dim;
             if (json.Value<bool?>("StraightConnections") is { } straight) StraightConnections = straight;
+            if (json.Value<string>("Font") is { } fontName && Fonts.FirstOrDefault(font => font.Name == fontName) is { } font)
+                SelectedFont = font;
 
             if (json["HeaderColors"] is JObject headerColors)
                 foreach (var property in headerColors.Properties())
@@ -128,6 +145,7 @@ public partial class MaterialViewerSettings : ObservableObject
             {
                 ["DimOnSelect"] = DimOnSelect,
                 ["StraightConnections"] = StraightConnections,
+                ["Font"] = (SelectedFont ?? Fonts[0]).Name,
                 ["HeaderColors"] = headerColors
             };
 
@@ -147,4 +165,5 @@ public partial class MaterialViewerSettings : ObservableObject
 
     [RelayCommand] private void ResetDimOnSelect() => DimOnSelect = true;
     [RelayCommand] private void ResetStraightConnections() => StraightConnections = true;
+    [RelayCommand] private void ResetFont() => SelectedFont = Fonts[0];
 }

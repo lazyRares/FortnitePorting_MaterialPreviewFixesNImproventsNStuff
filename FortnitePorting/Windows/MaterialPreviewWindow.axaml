@@ -15,7 +15,7 @@
         x:DataType="windowModels:MaterialPreviewWindowModel"
         Width="1280" Height="720" RequestedThemeVariant="Dark" Background="{DynamicResource WindowBackgroundBrush}"  
         TransparencyLevelHint="{Binding Settings.Application.TransparencyHints}"
-        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaChromeHints="NoChrome" FontFamily="{StaticResource Viga}"
+        ExtendClientAreaToDecorationsHint="True" ExtendClientAreaChromeHints="NoChrome" FontFamily="{Binding ViewerFont, Source={x:Static nodes:MaterialViewerSettings.Instance}}"
         WindowStartupLocation="CenterScreen" ClosingBehavior="OwnerAndChildWindows" ExtendClientAreaTitleBarHeightHint="35"
         Icon="/Assets/LogoRebrand.ico"
         Title="Material Viewer">
@@ -105,6 +105,23 @@
                         <Flyout Placement="BottomEdgeAlignedRight">
                             <StackPanel Spacing="5" MinWidth="270" Margin="4">
                                 <TextBlock Text="Options" Classes="BodyStrongTextBlockStyle"/>
+
+                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Text="Font" VerticalAlignment="Center"/>
+                                    <ComboBox Grid.Column="1" MinWidth="130" VerticalAlignment="Center"
+                                              ItemsSource="{Binding Fonts, Source={x:Static nodes:MaterialViewerSettings.Instance}}"
+                                              SelectedItem="{Binding SelectedFont, Mode=TwoWay, Source={x:Static nodes:MaterialViewerSettings.Instance}}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="nodes:FontOption">
+                                                <TextBlock Text="{Binding Name}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Button Grid.Column="2" Classes="ToolbarIcon" ToolTip.Tip="Reset to default"
+                                            Command="{Binding ResetFontCommand, Source={x:Static nodes:MaterialViewerSettings.Instance}}">
+                                        <avalonia:MaterialIcon Kind="Restore"/>
+                                    </Button>
+                                </Grid>
 
                                 <Grid ColumnDefinitions="*,Auto,Auto">
                                     <TextBlock Grid.Column="0" Text="Dim unrelated on select" VerticalAlignment="Center"/>
@@ -218,7 +235,7 @@
                                                                         BorderThickness="1.5">
                                                        <nodify:GroupingNode.HeaderTemplate>
                                                            <DataTemplate x:DataType="x:String">
-                                                               <TextBlock Text="{Binding}" Classes="BodyStrongTextBlockStyle" FontFamily="{StaticResource Viga}">
+                                                               <TextBlock Text="{Binding}" Classes="BodyStrongTextBlockStyle" FontFamily="{Binding ViewerFont, Source={x:Static nodes:MaterialViewerSettings.Instance}}">
                                                                    <TextBlock.Effect>
                                                                        <DropShadowEffect Color="Black" Opacity="0.5" OffsetX="1" OffsetY="1" BlurRadius="0"/>
                                                                    </TextBlock.Effect>
@@ -249,7 +266,7 @@
                                                        </nodify:Node.Styles>
                                                        <nodify:Node.HeaderTemplate>
                                                            <DataTemplate x:DataType="x:String">
-                                                               <TextBlock Text="{Binding}" Classes="BodyStrongTextBlockStyle" FontFamily="{StaticResource Viga}">
+                                                               <TextBlock Text="{Binding}" Classes="BodyStrongTextBlockStyle" FontFamily="{Binding ViewerFont, Source={x:Static nodes:MaterialViewerSettings.Instance}}">
                                                                    <TextBlock.Effect>
                                                                        <DropShadowEffect Color="Black" Opacity="0.5" OffsetX="1" OffsetY="1" BlurRadius="0"/>
                                                                    </TextBlock.Effect>
